@@ -1,7 +1,7 @@
 const __name = (fn, _) => fn;
 import { getMedia } from '../core/anilist.js';
 
-var PAHE_ORIGIN = "https://animepahe.com";
+var PAHE_ORIGIN = "https://animepahe.pw";
 var KWIK = "https://kwik.cx";
 var JIKAN2 = "https://api.jikan.moe/v4";
 var UA3 = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
@@ -32,10 +32,16 @@ async function runBypass() {
     headers: { "User-Agent": UA3, Accept: "text/html,*/*" },
     redirect: "manual",
   });
+  if (probe.headers.get("cf-mitigated") === "challenge") {
+    throw new Error("AnimePahe is behind a Cloudflare challenge; direct server fetches cannot currently access it");
+  }
   const location = probe.headers.get("location");
   const base = location ? new URL(location).origin : PAHE_ORIGIN;
 
   const r1 = await fetch(`${base}/`, { headers: { "User-Agent": UA3, Accept: "text/html,*/*" } });
+  if (r1.headers.get("cf-mitigated") === "challenge") {
+    throw new Error("AnimePahe is behind a Cloudflare challenge; direct server fetches cannot currently access it");
+  }
   const c = parseCookies(r1.headers);
 
   const js = await fetch("https://check.ddos-guard.net/check.js", {
@@ -133,13 +139,16 @@ async function getPaheLinks(animeSession, epSession, cookies, audioTrack) {
 __name(getPaheLinks, "getPaheLinks");
 
 async function extractKwikM3u8(kwikUrl, referer) {
+  const kwikOrigin = new URL(kwikUrl).origin;
   const kwikHeaders = {
     "User-Agent": UA3,
     "Referer": referer || `${getPaheBase()}/`,
     "Accept": "text/html,application/xhtml+xml,*/*",
     "Accept-Language": "en-US,en;q=0.9",
   };
-  const html = await fetch(kwikUrl, { headers: kwikHeaders }).then((r) => r.text());
+  const pageRes = await fetch(kwikUrl, { headers: kwikHeaders });
+  const kwikCookies = parseCookies(pageRes.headers);
+  const html = await pageRes.text();
 
   for (const b of unpackAll(html)) {
     const mm = b.match(/https?:\/\/[^\s'"\\]+?\.m3u8[^\s'"\\]*/);
@@ -149,25 +158,33 @@ async function extractKwikM3u8(kwikUrl, referer) {
   const direct = html.match(/https?:\/\/[^\s'"<>\\]+?\.m3u8[^\s'"<>\\]*/);
   if (direct) return direct[0].replace(/\\/g, "");
 
-  const tokenM = html.match(/name=["']_token["']\s+value=["']([^"']+)["']/);
-  const vidM   = kwikUrl.match(/kwik\.cx\/e\/([A-Za-z0-9]+)/);
+  const tokenM = html.match(/name=["']_token["']\s+value=["']([^"']+)["']/)
+    ?? html.match(/<meta[^>]+name=["']csrf-token["'][^>]+content=["']([^"']+)["']/i);
+  const actionM = html.match(/<form[^>]+action=["']([^"']+)["']/i);
+  const vidM   = kwikUrl.match(/\/[efd]\/([A-Za-z0-9]+)/);
   if (tokenM && vidM) {
     const token = tokenM[1];
     const vid   = vidM[1];
+    const postUrl = actionM?.[1]
+      ? new URL(actionM[1], kwikUrl).toString()
+      : `${kwikOrigin}/f/${vid}`;
     try {
-      const postRes = await fetch(`${KWIK}/f/${vid}`, {
+      const postRes = await fetch(postUrl, {
         method: "POST",
         headers: {
           "User-Agent": UA3,
           "Referer": kwikUrl,
+          "Accept": "text/html,application/xhtml+xml,*/*",
+          "Accept-Language": "en-US,en;q=0.9",
           "Content-Type": "application/x-www-form-urlencoded",
-          "Origin": KWIK,
+          "Origin": kwikOrigin,
+          ...(Object.keys(kwikCookies).length ? { Cookie: ser(kwikCookies) } : {}),
         },
         body: `_token=${encodeURIComponent(token)}`,
         redirect: "manual",
       });
       const loc = postRes.headers.get("location");
-      if (loc && loc.includes(".m3u8")) return loc;
+      if (loc && loc.includes(".m3u8")) return new URL(loc, kwikUrl).toString();
       const body = await postRes.text().catch(() => "");
       const bm   = body.match(/https?:\/\/[^\s'"<>\\]+?\.m3u8[^\s'"<>\\]*/);
       if (bm) return bm[0].replace(/\\/g, "");
@@ -370,7 +387,7 @@ async function handleWatch(anilistId, audio, epStr) {
           audio,
           fansub,
           isActive,
-          referer: `${KWIK}/`,
+          referer: kwik,
         });
       }
       streams.push({
@@ -382,7 +399,7 @@ async function handleWatch(anilistId, audio, epStr) {
         audio,
         fansub,
         isActive,
-        referer: `${KWIK}/`,
+        referer: kwik,
       });
     }
     return { streams, download: dlUrl };

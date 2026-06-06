@@ -1,7 +1,24 @@
 import http from "node:http";
+import { createReadStream, existsSync } from "node:fs";
+import { extname, join, normalize } from "node:path";
+import { fileURLToPath } from "node:url";
 import worker from "./index.js";
 
 const PORT = process.env.PORT ?? 4000;
+const ROOT = fileURLToPath(new URL(".", import.meta.url));
+const PUBLIC = join(ROOT, "public");
+const MIME = {
+  ".html": "text/html; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".js": "text/javascript; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+  ".svg": "image/svg+xml",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".webp": "image/webp",
+  ".ico": "image/x-icon",
+};
 
 async function nodeToRequest(req) {
   const host = req.headers["host"] ?? `localhost:${PORT}`;
@@ -19,8 +36,30 @@ async function nodeToRequest(req) {
   });
 }
 
+function serveStatic(req, res) {
+  if (req.method !== "GET" && req.method !== "HEAD") return false;
+
+  const url = new URL(req.url, `http://${req.headers.host ?? `localhost:${PORT}`}`);
+  const pathname = decodeURIComponent(url.pathname);
+  const filePath = pathname === "/" ? join(PUBLIC, "index.html") : join(PUBLIC, pathname);
+  const safePath = normalize(filePath);
+  if (!safePath.startsWith(PUBLIC) || !existsSync(safePath)) return false;
+
+  res.statusCode = 200;
+  res.setHeader("Content-Type", MIME[extname(safePath)] ?? "application/octet-stream");
+  res.setHeader("Cache-Control", pathname === "/" ? "no-store" : "public, max-age=3600");
+  if (req.method === "HEAD") {
+    res.end();
+    return true;
+  }
+  createReadStream(safePath).pipe(res);
+  return true;
+}
+
 const server = http.createServer(async (req, res) => {
   console.log(`→ ${req.method} ${req.url}`);
+  if (serveStatic(req, res)) return;
+
   try {
     const request  = await nodeToRequest(req);
     const response = await worker.fetch(request, {});
@@ -40,6 +79,11 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, () => {
   console.log(`api-vexa dev server running at http://localhost:${PORT}`);
+  console.log(`  Web app http://localhost:${PORT}/`);
+  console.log(`  GET /home`);
+  console.log(`  GET /popular?page=1`);
+  console.log(`  GET /airing?page=1`);
+  console.log(`  GET /search?q=query`);
   console.log(`  GET /map/:anilistId`);
   console.log(`  GET /episodes/:anilistId`);
   console.log(`  GET /watch/animepahe/:id/sub|dub/animepahe-:ep`);

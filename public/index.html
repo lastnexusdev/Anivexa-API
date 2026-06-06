@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Anivexa</title>
+    <link rel="stylesheet" href="/styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js" defer></script>
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js" defer></script>
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <button class="brand" id="homeButton" type="button" aria-label="Home">
+        <span class="brand-mark">A</span>
+        <span>Anivexa</span>
+      </button>
+      <form class="search" id="searchForm">
+        <i data-lucide="search"></i>
+        <input id="searchInput" name="q" type="search" autocomplete="off" placeholder="Search anime">
+        <button type="submit" aria-label="Search"><i data-lucide="arrow-right"></i></button>
+      </form>
+      <nav class="tabs" aria-label="Feeds">
+        <button class="tab is-active" data-feed="home" type="button">Home</button>
+        <button class="tab" data-feed="airing" type="button">Airing</button>
+        <button class="tab" data-feed="popular" type="button">Popular</button>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero" id="hero"></section>
+      <section class="status" id="status" hidden></section>
+      <section class="content" id="content"></section>
+    </main>
+
+    <template id="cardTemplate">
+      <button class="anime-card" type="button">
+        <span class="poster-wrap">
+          <img class="poster" alt="">
+          <span class="score"></span>
+        </span>
+        <span class="card-title"></span>
+        <span class="card-meta"></span>
+      </button>
+    </template>
+  </body>
+</html>
